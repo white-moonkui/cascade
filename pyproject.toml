@@ -1,0 +1,23 @@
+[project]
+name = "cascade"
+version = "0.2.0"
+description = "Guard LLM tool calls with rules, scoring, and audit trails."
+authors = [{ name = "cascade" }]
+license = { text = "MIT" }
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = []
+keywords = ["llm", "agent", "tools", "governance", "guardrails"]
+
+[project.urls]
+homepage = "https://github.com/user/cascade"
+
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+cascade = ["py.typed"]

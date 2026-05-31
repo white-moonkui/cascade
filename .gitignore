@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Testing
+.pytest_cache/
+.cache/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Cascade checkpoints
+.cascade/
+
+# Virtual environments
+.env
+venv/
+.venv/
