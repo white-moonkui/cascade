@@ -6,7 +6,6 @@ Independent module — no internal cascade imports, no checkpoint store.
 """
 
 from typing import Any, Optional
-from datetime import datetime
 
 
 class ConditionVerifier:
@@ -14,11 +13,12 @@ class ConditionVerifier:
     Evaluates a set of condition rules against a given context.
 
     Each rule is a dict with a ``field``, ``op`` (operator), and
-    ``value``. A context dict is matched against every rule; all must
-    pass for the gate to open.
+    ``value``, **or** a composite rule with ``compose``.
 
-    Built-in operators: ``eq``, ``ne``, ``gt``, ``gte``, ``lt``,
+    Built-in leaf operators: ``eq``, ``ne``, ``gt``, ``gte``, ``lt``,
     ``lte``, ``in``, ``nin``, ``regex``, ``exists``, ``type``.
+
+    Composite operators: ``all_of`` (AND), ``any_of`` (OR), ``not``.
     """
 
     BUILTIN_OPS: dict[str, str] = {
@@ -51,39 +51,66 @@ class ConditionVerifier:
     def evaluate(self, context: dict) -> tuple[bool, list[dict]]:
         """
         Return ``(all_pass, [detail, ...])`` where each detail dict
-        contains ``rule``, ``field``, ``op``, ``expected``,
-        ``actual``, and ``passed``.
+        describes a single leaf rule or a composite node.
         """
         results: list[dict] = []
         for r in self.rules:
-            try:
-                passed = self._evaluate(r, context)
-            except Exception as exc:
-                passed = False
-                results.append(
-                    {
-                        "rule": r,
-                        "field": r.get("field"),
-                        "op": r.get("op"),
-                        "expected": r.get("value"),
-                        "actual": str(exc),
-                        "passed": False,
-                        "error": str(exc),
-                    }
-                )
-                continue
-            actual = self._resolve_field(r["field"], context)
-            results.append(
-                {
-                    "rule": r,
-                    "field": r["field"],
-                    "op": r["op"],
-                    "expected": r["value"],
-                    "actual": actual,
-                    "passed": passed,
-                }
-            )
+            detail = self._evaluate_detail(r, context)
+            results.append(detail)
         return all(r["passed"] for r in results), results
+
+    # ── internal ──────────────────────────────────────────────────────────
+
+    def _evaluate_detail(self, rule: dict, context: dict) -> dict:
+        """Evaluate one rule (leaf or composite) and return a detail dict."""
+        if "compose" in rule:
+            return self._evaluate_compose(rule, context)
+
+        # Leaf rule
+        try:
+            passed = self._evaluate(rule, context)
+        except Exception as exc:
+            return {
+                "rule": rule,
+                "field": rule.get("field"),
+                "op": rule.get("op"),
+                "expected": rule.get("value"),
+                "actual": str(exc),
+                "passed": False,
+                "error": str(exc),
+            }
+        actual = self._resolve_field(rule["field"], context)
+        return {
+            "rule": rule,
+            "field": rule["field"],
+            "op": rule["op"],
+            "expected": rule["value"],
+            "actual": actual,
+            "passed": passed,
+        }
+
+    def _evaluate_compose(self, rule: dict, context: dict) -> dict:
+        """Evaluate a composite rule and return a detail dict with children."""
+        compose = rule["compose"]
+        children = [self._evaluate_detail(r, context) for r in rule.get("rules", [])]
+
+        if compose == "all_of":
+            passed = all(c["passed"] for c in children)
+        elif compose == "any_of":
+            passed = any(c["passed"] for c in children)
+        elif compose == "not":
+            child = self._evaluate_detail(rule["rule"], context)
+            passed = not child["passed"]
+            children = [child]
+        else:
+            raise ValueError(f"Unknown composite operator: {compose}")
+
+        return {
+            "rule": rule,
+            "compose": compose,
+            "passed": passed,
+            "children": children,
+        }
 
     def _resolve_field(self, field: str, context: dict) -> Any:
         parts = field.split(".")
@@ -119,7 +146,6 @@ class ConditionVerifier:
             return actual not in expected if expected else True
         elif op == "regex":
             import re
-
             return bool(re.match(expected, str(actual)))
         elif op == "exists":
             return actual is not None

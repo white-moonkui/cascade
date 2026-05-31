@@ -16,6 +16,8 @@ from cascade.c2_trigger import TriggerEngine
 from cascade.c3_selector import Candidate, SelectionPressure
 from cascade.c4_feedback import FeedbackLoop, Outcome
 from cascade.linkage import Linkage
+from cascade import rules
+from cascade import actions
 
 __all__ = [
     "AuditTrail",
@@ -86,6 +88,7 @@ class DecisionPipeline:
         strategy: str = "softmax",
         top_k: int = 1,
         context: Optional[dict] = None,
+        actions: Optional[dict[str, dict]] = None,
         **kwargs,
     ) -> dict:
         """Govern tool-call selection in one call.
@@ -132,31 +135,24 @@ class DecisionPipeline:
             for i, tc in enumerate(tool_calls)
         ]
 
-        # 2. Gate — check context against ALL rules, then each tool call
-        #    against rules whose field exists in that tool call's dict.
-        context_passed = True
-        context_details: list[dict] = []
-        if context:
-            ctx_gate = ConditionVerifier()
-            for r in rules:
-                ctx_gate.add_rule(r["field"], r["op"], r["value"])
-            context_passed, context_details = ctx_gate.evaluate(context)
-
+        # 2. Gate — evaluate rules against merged context (tool call fields
+        #    override session context, so both tool-level and context-level
+        #    rules work naturally).  Composite rules (all_of / any_of / not_)
+        #    are handled recursively by ConditionVerifier.
         gate_details: list[dict] = []
         surviving: list[Candidate] = []
 
         for tc in tool_calls:
-            tc_gate = ConditionVerifier()
-            for r in rules:
-                if r["field"] in tc:
-                    tc_gate.add_rule(r["field"], r["op"], r["value"])
-            flat = {k: v for k, v in tc.items() if not isinstance(v, dict)}
-            tc_passed, tc_details = tc_gate.evaluate(flat)
+            merged = {**context, **tc}  # full tc (incl. arguments) for dot-resolution
 
-            passed = tc_passed and context_passed
-            details = tc_details
-            if not context_passed:
-                details = context_details + details
+            gate = ConditionVerifier()
+            for r in rules:
+                if "compose" in r:
+                    gate.rules.append(r)                # composite → verbatim
+                else:
+                    gate.add_rule(r["field"], r["op"], r["value"])
+
+            passed, details = gate.evaluate(merged)
 
             if passed:
                 idx = tool_calls.index(tc)
@@ -171,15 +167,88 @@ class DecisionPipeline:
                 }
             )
 
-        all_gate_pass = context_passed and (
-            not gate_details or any(g["passed"] for g in gate_details)
-        )
+        all_gate_pass = not gate_details or any(g["passed"] for g in gate_details)
+
+        # 2a. Actions — apply on_reject handlers for failed tool calls.
+        #     block → keep rejected; transform / redirect → re-evaluate gate.
+        saved_by_action: list[Candidate] = []
+        if actions:
+            for gd in gate_details:
+                if gd["passed"]:
+                    continue
+                tc = next(
+                    (t for t in tool_calls if t.get("id") == gd["tool_id"]),
+                    None,
+                )
+                if tc is None or tc.get("name") not in actions:
+                    continue
+                action = actions[tc["name"]]
+                kind = action.get("action")
+
+                if kind == "block":
+                    gd["action"] = "block"
+                    gd["reason"] = action.get("reason", "Blocked by policy")
+
+                elif kind == "transform":
+                    transformed = action["fn"](tc)
+                    if transformed is None:
+                        gd["action"] = "block"
+                        gd["reason"] = "Removed by transform"
+                        continue
+                    # re-evaluate gate with transformed tool call
+                    merged = {**context, **transformed}
+                    gate = ConditionVerifier()
+                    for r in rules:
+                        if "compose" in r:
+                            gate.rules.append(r)
+                        else:
+                            gate.add_rule(r["field"], r["op"], r["value"])
+                    passed, details = gate.evaluate(merged)
+                    gd["passed"] = passed
+                    gd["details"] = details
+                    gd["action"] = "transform"
+                    if passed:
+                        gd["tool_id"] = transformed.get("id", gd["tool_id"])
+                        gd["tool_name"] = transformed.get("name", gd["tool_name"])
+                        idx = tool_calls.index(tc)
+                        saved_by_action.append(candidates[idx])
+                        candidates[idx].label = transformed.get("name", candidates[idx].label)
+                        candidates[idx].metadata["arguments"] = transformed.get("arguments", {})
+
+                elif kind == "redirect":
+                    to_tool = action["to_tool"]
+                    transform_args = action.get("transform_args", lambda a: a)
+                    modified = {**tc, "name": to_tool}
+                    if "arguments" in modified:
+                        modified["arguments"] = transform_args(modified["arguments"])
+                    merged = {**context, **modified}
+                    gate = ConditionVerifier()
+                    for r in rules:
+                        if "compose" in r:
+                            gate.rules.append(r)
+                        else:
+                            gate.add_rule(r["field"], r["op"], r["value"])
+                    passed, details = gate.evaluate(merged)
+                    gd["passed"] = passed
+                    gd["details"] = details
+                    gd["action"] = "redirect"
+                    gd["tool_name"] = to_tool
+                    if passed:
+                        idx = tool_calls.index(tc)
+                        saved_by_action.append(candidates[idx])
+                        candidates[idx].label = to_tool
+                        candidates[idx].metadata["arguments"] = modified.get("arguments", {})
+
+        if saved_by_action:
+            surviving.extend(saved_by_action)
 
         result: dict[str, Any] = {
             "passed": all_gate_pass,
             "selected": [],
             "rejected": [],
             "gate_results": gate_details,
+            "strategy": strategy,
+            "top_k": top_k,
         }
 
         # 3. Selection — discard candidates with zero pressure (e.g. threshold rejects)
