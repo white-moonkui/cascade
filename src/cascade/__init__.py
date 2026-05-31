@@ -6,8 +6,11 @@ Guard LLM tool invocations with rules, scoring, and audit trails.
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Any, Optional
 from dataclasses import dataclass, field
+from datetime import datetime
 
 from cascade._store import Store
 from cascade._audit import AuditTrail
@@ -70,7 +73,7 @@ class DecisionPipeline:
     """
 
     def __init__(self, store: Optional[Store] = None, audit: Optional[AuditTrail] = None):
-        store = store or Store()
+        store = store or Store(store_dir=str(Path.cwd() / ".cascade" / "store"))
         self._store = store
         self.audit = audit or AuditTrail()
         self.gate = ConditionVerifier()
@@ -124,12 +127,13 @@ class DecisionPipeline:
         rules = rules or []
         context = context or {}
 
-        # 1. Convert to Candidates
+        # 1. Convert to Candidates — merge LLM confidence with learned scores
+        learned = self._load_scores()
         candidates = [
             Candidate(
                 id=tc.get("id", f"tc_{i}"),
                 label=tc.get("name", "unknown"),
-                score=float(tc.get("confidence", 0.0)),
+                score=learned.get(tc.get("name", ""), float(tc.get("confidence", 0.0))),
                 metadata={"arguments": tc.get("arguments", {}), **tc.get("metadata", {})},
             )
             for i, tc in enumerate(tool_calls)
@@ -334,3 +338,107 @@ class DecisionPipeline:
             "feedback": self.feedback.summary(),
             "linkage": {"module": "C3-C4 Linkage"},
         }
+
+    # ── emergence: C₃ ↔ C₄ closed loop ──────────────────────────────
+
+    _SCORES_KEY = "_emergence_scores"
+
+    def _scores_path(self) -> Path:
+        return self._store.store_dir / "emergence_scores.json"
+
+    def _load_scores(self) -> dict[str, float]:
+        """Load learned scores from persistent store."""
+        path = self._scores_path()
+        if path.exists():
+            try:
+                return json.loads(path.read_text())
+            except (json.JSONDecodeError, OSError):
+                return {}
+        return {}
+
+    def _save_scores(self, scores: dict[str, float]) -> None:
+        """Persist learned scores to disk."""
+        self._scores_path().parent.mkdir(parents=True, exist_ok=True)
+        self._scores_path().write_text(json.dumps(scores, indent=2, default=str))
+
+    def record_outcome(
+        self,
+        tool_name: str,
+        reward: float,
+        learning_rate: float = 0.1,
+    ) -> dict:
+        """Feed a reward signal back into the system.
+
+        Records the outcome in C₄ (feedback) and adjusts the learned
+        score for *tool_name* in C₃.  Future ``guard()`` calls will use
+        the adjusted score when ranking this tool.
+
+        Parameters
+        ----------
+        tool_name:
+            Name of the tool that was executed.
+        reward:
+            Positive (good outcome) or negative (bad outcome) signal.
+        learning_rate:
+            How strongly the reward affects the score (default 0.1).
+
+        Returns
+        -------
+        Dict with ``tool_name``, ``old_score``, ``new_score``,
+        ``reward``, ``outcome``.
+        """
+        scores = self._load_scores()
+        old_score = scores.get(tool_name, 0.0)
+        delta = learning_rate * reward
+        new_score = old_score + delta
+        scores[tool_name] = new_score
+        self._save_scores(scores)
+
+        outcome = self.feedback.record(
+            decision_id=tool_name,
+            expected=0.0,
+            actual=reward,
+            strategy="proportional",
+        )
+
+        return {
+            "tool_name": tool_name,
+            "old_score": round(old_score, 4),
+            "new_score": round(new_score, 4),
+            "reward": reward,
+            "delta": round(delta, 4),
+            "outcome": outcome,
+        }
+
+    def governance_report(self) -> dict:
+        """View the current governance state — learned scores, feedback
+        history, and system health.
+
+        Returns a dict with keys: ``scores``, ``feedback_summary``,
+        ``n_tools_tracked``, ``total_feedback``.
+        """
+        scores = self._load_scores()
+        fb = self.feedback.summary()
+        return {
+            "scores": dict(sorted(scores.items(), key=lambda x: x[1], reverse=True)),
+            "n_tools_tracked": len(scores),
+            "total_feedback": fb.get("total_outcomes", 0),
+            "average_reward": round(fb.get("avg_reward", 0.0), 4),
+            "recent_feedback": fb.get("recent", []),
+        }
+
+    def reset_scores(self, tool_name: Optional[str] = None) -> int:
+        """Reset learned scores to zero.
+
+        If *tool_name* is given, only that tool is reset.
+        Returns the number of scores cleared.
+        """
+        scores = self._load_scores()
+        if tool_name:
+            n = 1 if tool_name in scores else 0
+            scores.pop(tool_name, None)
+        else:
+            n = len(scores)
+            scores.clear()
+        self._save_scores(scores)
+        return n
