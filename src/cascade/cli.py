@@ -152,7 +152,7 @@ def _cmd_audit_verify(args: argparse.Namespace):
     if args.path:
         trail = AuditTrail(path=args.path)
     else:
-        # Fallback: default AuditTrail path (may fail if HOME is unset)
+        # Fallback: default AuditTrail path
         import os as _os
 
         default = Path(_os.path.expanduser("~/.cascade/audit.jsonl"))
@@ -170,6 +170,36 @@ def _cmd_audit_verify(args: argparse.Namespace):
             print(f"  - {err}")
 
     sys.exit(0 if result["valid"] else 1)
+
+
+def _cmd_audit_export(args: argparse.Namespace):
+    from cascade._audit import AuditTrail
+    from cascade.audit._report import export_json, export_html
+
+    if args.path:
+        trail = AuditTrail(path=args.path)
+    else:
+        import os as _os
+
+        default = Path(_os.path.expanduser("~/.cascade/audit.jsonl"))
+        trail = AuditTrail(path=str(default))
+
+    output_path = Path(args.output) if args.output else None
+
+    if args.format == "json":
+        report = export_json(trail.path, output=output_path)
+        if output_path:
+            print(f"JSON report written to: {output_path}")
+        else:
+            import json as _json
+
+            print(_json.dumps(report, indent=2, default=str, ensure_ascii=False))
+    else:
+        html = export_html(trail.path, output=output_path)
+        if output_path:
+            print(f"HTML report written to: {output_path}")
+        else:
+            print(html)
 
 
 # ------------------------------------------------------------------
@@ -217,6 +247,15 @@ def main():
     )
     audit_verify.add_argument("--path", help="Path to audit JSONL file (optional)")
     audit_verify.set_defaults(func=_cmd_audit_verify)
+
+    audit_export = audit_sub.add_parser(
+        "export", help="Export compliance report (HTML/JSON)"
+    )
+    audit_export.add_argument("--format", default="html", choices=["html", "json"],
+                              help="Report format (default: html)")
+    audit_export.add_argument("--output", "-o", help="Output file path (optional; prints to stdout if omitted)")
+    audit_export.add_argument("--path", help="Path to audit JSONL file (optional)")
+    audit_export.set_defaults(func=_cmd_audit_export)
 
     args = parser.parse_args()
     args.func(args)

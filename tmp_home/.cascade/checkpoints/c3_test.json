@@ -1,0 +1,27 @@
+{
+  "tag": "test",
+  "candidates": [
+    {
+      "id": "a",
+      "label": "A",
+      "score": 0.9,
+      "pressure": 0.436752,
+      "metadata": {}
+    },
+    {
+      "id": "b",
+      "label": "B",
+      "score": 0.6,
+      "pressure": 0.323554,
+      "metadata": {}
+    },
+    {
+      "id": "c",
+      "label": "C",
+      "score": 0.3,
+      "pressure": 0.239694,
+      "metadata": {}
+    }
+  ],
+  "_saved_at": "2026-06-01T16:54:58.881507"
+}

@@ -1,0 +1,13 @@
+{
+  "tag": "single",
+  "candidates": [
+    {
+      "id": "x",
+      "label": "X",
+      "score": 100,
+      "pressure": 1.0,
+      "metadata": {}
+    }
+  ],
+  "_saved_at": "2026-06-01T16:54:58.884305"
+}

@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] — 2026-06 — Runtime Injection Detection & Compliance Reports
+
+### Added
+- **Runtime injection detection**: ``DecisionPipeline(enable_injection_detection=True)``
+  — scans tool-call arguments for 20+ dangerous patterns (eval, exec, os.system,
+  subprocess, rm -rf, path traversal, pickle, …)
+- **Extensible scanner**: ``add_pattern()`` / ``remove_pattern()`` / ``extra_patterns`` /
+  ``exclude`` kwargs for per-call customization
+- **Compliance report export**: ``cascade audit export`` CLI subcommand
+- **HTML reports**: Self-contained (inline CSS, no JS), with summary cards, bar
+  charts, and last-100-entries table
+- **JSON export**: ``cascade audit export --format json`` — full metadata + entries
+- **Pipeline report API**: ``pipe.audit_report(format="json")`` /
+  ``pipe.audit_report(format="html")``
+
 ## [0.6.0] — 2026-06 — Anthropic, CrewAI & MCP Adapters
 
 ### Added

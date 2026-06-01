@@ -1,0 +1,20 @@
+{
+  "tag": "integ",
+  "candidates": [
+    {
+      "id": "a",
+      "label": "A",
+      "score": 0.8,
+      "pressure": 0.598688,
+      "metadata": {}
+    },
+    {
+      "id": "b",
+      "label": "B",
+      "score": 0.4,
+      "pressure": 0.401312,
+      "metadata": {}
+    }
+  ],
+  "_saved_at": "2026-06-01T16:54:58.892299"
+}

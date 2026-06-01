@@ -14,6 +14,7 @@ from datetime import datetime
 
 from cascade._store import Store
 from cascade._audit import AuditTrail
+from cascade._injection import scan_arguments
 from cascade.c1_gate import ConditionVerifier
 from cascade.c2_trigger import TriggerEngine
 from cascade.c3_selector import Candidate, SelectionPressure
@@ -72,7 +73,15 @@ class DecisionPipeline:
             print(f"Selected: {tool.name} (audit: {result['audit_id']})")
     """
 
-    def __init__(self, store: Optional[Store] = None, audit: Optional[AuditTrail] = None):
+    def __init__(
+        self,
+        store: Optional[Store] = None,
+        audit: Optional[AuditTrail] = None,
+        *,
+        enable_injection_detection: bool = False,
+        injection_scan_depth: str = "arguments",
+        injection_action: str = "reject",
+    ):
         store = store or Store(store_dir=str(Path.cwd() / ".cascade" / "store"))
         self._store = store
         self.audit = audit or AuditTrail()
@@ -81,6 +90,9 @@ class DecisionPipeline:
         self.selector = SelectionPressure(store=store)
         self.feedback = FeedbackLoop(store=store)
         self.linkage = Linkage(selector=self.selector, feedback=self.feedback, store=store)
+        self._injection_enabled = enable_injection_detection
+        self._injection_scan_depth = injection_scan_depth
+        self._injection_action = injection_action
 
     # ── primary API ────────────────────────────────────────────────
 
@@ -139,6 +151,14 @@ class DecisionPipeline:
             for i, tc in enumerate(tool_calls)
         ]
 
+        # 1b. Injection detection — scan arguments before gate
+        injection_hits: list[dict] = []
+        if self._injection_enabled:
+            for tc in tool_calls:
+                args = tc.get("arguments", {})
+                hits = scan_arguments(args)
+                injection_hits.append({"tool_id": tc.get("id"), "hits": hits})
+
         # 2. Gate — evaluate rules against merged context (tool call fields
         #    override session context, so both tool-level and context-level
         #    rules work naturally).  Composite rules (all_of / any_of / not_)
@@ -146,8 +166,26 @@ class DecisionPipeline:
         gate_details: list[dict] = []
         surviving: list[Candidate] = []
 
-        for tc in tool_calls:
+        for idx, tc in enumerate(tool_calls):
             merged = {**context, **tc}  # full tc (incl. arguments) for dot-resolution
+
+            # Injection override — reject if any pattern matched
+            ih = injection_hits[idx]["hits"] if injection_hits else []
+            if ih:
+                gate_details.append(
+                    {
+                        "tool_id": tc.get("id"),
+                        "tool_name": tc.get("name"),
+                        "passed": False,
+                        "details": [
+                            {"field": "_injection", "op": "pattern_matched",
+                             "expected": "no injection", "actual": h["name"]}
+                            for h in ih
+                        ],
+                        "injection": ih,
+                    }
+                )
+                continue  # skip gate — already rejected
 
             gate = ConditionVerifier()
             for r in rules:
@@ -159,7 +197,6 @@ class DecisionPipeline:
             passed, details = gate.evaluate(merged)
 
             if passed:
-                idx = tool_calls.index(tc)
                 surviving.append(candidates[idx])
 
             gate_details.append(
@@ -358,6 +395,29 @@ class DecisionPipeline:
             max_threshold=max_threshold,
             sensitivity=sensitivity,
         )
+
+    def audit_report(self, format: str = "json") -> Any:
+        """Export compliance report from the audit trail.
+
+        Parameters
+        ----------
+        format:
+            ``"json"`` — returns a dict with metadata + full entries.
+            ``"html"`` — returns a self-contained HTML string.
+
+        Returns
+        -------
+        Dict (json) or HTML string (html).
+        """
+        from cascade.audit._report import export_json, export_html
+
+        path = self.audit.path
+        if format == "json":
+            return export_json(path)
+        elif format == "html":
+            return export_html(path)
+        else:
+            raise ValueError(f"Unknown report format: {format!r} (use 'json' or 'html')")
 
     def summary(self) -> dict:
         return {

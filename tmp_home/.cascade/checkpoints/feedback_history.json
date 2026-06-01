@@ -1,0 +1,26 @@
+[
+  {
+    "decision_id": "match",
+    "expected": 1.0,
+    "actual": 0.9,
+    "reward": -1.0,
+    "timestamp": "2026-06-01T16:54:58.886654",
+    "metadata": {}
+  },
+  {
+    "decision_id": "orphan",
+    "expected": 1,
+    "actual": 1,
+    "reward": 1.0,
+    "timestamp": "2026-06-01T16:54:58.889554",
+    "metadata": {}
+  },
+  {
+    "decision_id": "a",
+    "expected": "good",
+    "actual": "good",
+    "reward": 1.0,
+    "timestamp": "2026-06-01T16:54:58.955486",
+    "metadata": {}
+  }
+]

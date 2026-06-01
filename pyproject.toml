@@ -1,6 +1,6 @@
 [project]
 name = "agent-armour"
-version = "0.6.0"
+version = "0.7.0"
 description = "Guard LLM tool calls with rules, scoring, and audit trails."
 authors = [{ name = "cascade" }]
 license = { text = "MIT" }
