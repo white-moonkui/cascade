@@ -41,7 +41,39 @@ if result["selected"]:
 pip install cascade
 ```
 
-Zero external dependencies.
+Zero external dependencies.  Framework adapters are available as optional extras:
+
+```bash
+pip install cascade[openai]     # OpenAI SDK adapter
+pip install cascade[langchain]  # LangChain adapter
+```
+
+## Adapters
+
+Framework-specific adapters let you plug cascade governance into your
+existing agent code with minimal changes.  Each adapter is a thin (<80 lines)
+layer — zero impact on the core codebase.
+
+```python
+# OpenAI — auto-govern every chat.completions.create
+from openai import OpenAI
+from cascade import DecisionPipeline
+from cascade.adapters.openai import wrap_openai_client
+
+client = wrap_openai_client(
+    OpenAI(),
+    pipeline=DecisionPipeline(),
+    rules=[{"field": "name", "op": "nin", "value": ["delete_file", "exec"]}],
+)
+```
+
+```python
+# LangChain — post-process agent output
+from cascade.adapters.langchain import guard_agent_output
+
+result = agent.invoke({"input": "search for papers on AI safety"})
+result = guard_agent_output(result, pipeline=pipe, rules=[...])
+```
 
 ## Why cascade?
 
@@ -75,17 +107,20 @@ Linkage        : C₃↔C₄ closed loop — rewards adjust future selection
 
 ## Integrations
 
-```python
-# OpenAI SDK — intercept before tool_choice
-response = client.chat.completions.create(..., tools=my_tools)
-safe_tools = pipe.guard(
-    tool_calls=[t.dict() for t in response.choices[0].message.tool_calls],
-    rules=[{"field": "name", "op": "nin", "value": BLOCKED_TOOLS}],
-)
-```
+| Framework | Adapter | Lines | Install |
+|-----------|---------|-------|---------|
+| [OpenAI SDK](src/cascade/adapters/openai.py) | `wrap_openai_client()` / `guard_openai_response()` | ~70 | `cascade[openai]` |
+| [LangChain](src/cascade/adapters/langchain.py) | `guard_agent_output()` | ~55 | `cascade[langchain]` |
+
+Each adapter is **opt-in** — the core stays zero-dependency.  All adapters
+live in ``src/cascade/adapters/`` and import only what they need at runtime.
+
+For custom framework integrations, use ``pipe.guard()`` directly:
 
 ```python
-# LangChain — agent output goes through cascade
-agent_result = agent.invoke({"input": query})
-safe = pipe.guard(tool_calls=agent_tool_calls, rules=[...])
+response = client.chat.completions.create(..., tools=my_tools)
+result = pipe.guard(
+    tool_calls=[{"id": t.id, "name": t.function.name, ...}],
+    rules=[{"field": "name", "op": "nin", "value": BLOCKED_TOOLS}],
+)
 ```
