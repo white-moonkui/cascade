@@ -48,6 +48,8 @@ pip install cascade[openai]     # OpenAI SDK adapter
 pip install cascade[anthropic]  # Anthropic SDK adapter
 pip install cascade[langchain]  # LangChain adapter
 pip install cascade[crewai]     # CrewAI adapter
+pip install cascade[gemini]     # Gemini SDK adapter
+pip install cascade[autogen]    # AutoGen adapter
 pip install cascade[yaml]       # YAML policy files + cascade policy lint
 ```
 
@@ -169,6 +171,8 @@ Linkage        : C₃↔C₄ closed loop — rewards adjust future selection
 | [Anthropic SDK](src/cascade/adapters/anthropic.py) | `guard_anthropic_response()` / `wrap_anthropic_client()` | ~70 | `cascade[anthropic]` |
 | [LangChain](src/cascade/adapters/langchain.py) | `guard_agent_output()` | ~55 | `cascade[langchain]` |
 | [CrewAI](src/cascade/adapters/crewai.py) | `guard_crew_output()` / `wrap_crew()` | ~65 | `cascade[crewai]` |
+| [Gemini SDK](src/cascade/adapters/gemini.py) | `guard_gemini_response()` / `wrap_genai_client()` | ~80 | `cascade[gemini]` |
+| [AutoGen](src/cascade/adapters/autogen.py) | `guard_agent_reply()` / `wrap_agent()` | ~120 | `cascade[autogen]` |
 | [MCP Server](src/cascade/adapters/mcp.py) | `guarded_tool()` / `MCPServerGuard` | ~100 | zero-dep (core) |
 
 Each adapter is **opt-in** — the core stays zero-dependency.  All adapters

@@ -6,6 +6,8 @@ Guard LLM tool invocations with rules, scoring, and audit trails.
 
 from __future__ import annotations
 
+__version__ = "0.8.0"
+
 import json
 from pathlib import Path
 from typing import Any, Optional
