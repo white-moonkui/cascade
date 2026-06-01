@@ -41,11 +41,12 @@ if result["selected"]:
 pip install cascade
 ```
 
-Zero external dependencies.  Framework adapters are available as optional extras:
+Zero external dependencies.  Optional extras extend the feature set:
 
 ```bash
 pip install cascade[openai]     # OpenAI SDK adapter
 pip install cascade[langchain]  # LangChain adapter
+pip install cascade[yaml]       # YAML policy files + cascade policy lint
 ```
 
 ## Adapters
@@ -85,6 +86,58 @@ result = guard_agent_output(result, pipeline=pipe, rules=[...])
 - **Composite rules** — `all_of` / `any_of` / `not_` for complex policies
 - **Actions** — `block` / `redirect` / `transform` for automated remediation
 
+## Policies
+
+Define governance rules in YAML for repeatable, audit-friendly policies.
+
+```yaml
+# policy.yaml
+name: strict-tools
+description: Block dangerous tools
+rules:
+  - field: name
+    op: nin
+    value: [delete_file, exec, rm]
+  - field: confidence
+    op: gte
+    value: 0.7
+  - all_of:
+      - field: name
+        op: eq
+        value: code_interpreter
+      - field: confidence
+        op: gte
+        value: 0.9
+
+strategy: softmax
+top_k: 1
+```
+
+```bash
+cascade policy lint policy.yaml
+cascade check --tool-calls @tools.json --policy policy.yaml
+```
+
+Composite rules (``all_of`` / ``any_of`` / ``not_``), ``@import`` directives, and
+full schema validation are supported.
+
+## Audit chain integrity
+
+Every ``guard()`` decision is recorded in a SHA-256 hash-chained JSONL audit
+trail.  Each entry links to its predecessor via ``prev_hash``, making the log
+tamper-evident.
+
+```bash
+cascade audit verify
+```
+
+```python
+from cascade._audit import AuditTrail
+
+trail = AuditTrail()
+result = trail.verify()  # {'valid': True, 'entries': 42, ...}
+```
+
 ## C1–C4 Architecture
 
 ```
@@ -102,7 +155,8 @@ Linkage        : C₃↔C₄ closed loop — rewards adjust future selection
 | [docs/usage.md](docs/usage.md) | `guard()` API, `DecisionPipeline`, `AuditTrail` |
 | [docs/rules.md](docs/rules.md) | Leaf rules, rule presets, composite rules (all_of/any_of/not_) |
 | [docs/strategies.md](docs/strategies.md) | Selection strategies and when to use each |
-| [docs/cli.md](docs/cli.md) | `cascade check` CLI reference |
+| [docs/cli.md](docs/cli.md) | `cascade check` / `policy lint` / `audit verify` CLI reference |
+| [docs/owasp.md](docs/owasp.md) | OWASP Agentic Top 10 compliance mapping |
 | [CHANGELOG.md](CHANGELOG.md) | Version history |
 
 ## Integrations
