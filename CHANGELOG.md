@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] — 2026-06 — Framework Adapters, Audit Chain & Policy Loader
+
+### Added
+- **OpenAI adapter**: `wrap_openai_client()` — auto-govern every `chat.completions.create` call
+- **LangChain adapter**: `guard_agent_output()` — post-process agent output
+- **OWASP Agentic Top 10 compliance mapping**: Full `docs/owasp.md`
+- **SHA-256 audit chain**: Tamper-evident JSONL with `prev_hash` + `hash` + `verify()`
+- **YAML policy loader**: `cascade/policies/yaml_loader.py` with schema validation
+- **Composite rules in YAML**: `all_of` / `any_of` / `not_`; `@import` directives
+- **CLI subcommands**: `cascade policy lint`, `cascade audit verify`
+- **`cascade check --policy`**: Load rules directly from YAML policy files
+- **Optional extras**: `cascade[openai]`, `cascade[langchain]`, `cascade[yaml]`
+
+### Changed
+- `AuditTrail.record()` now also sets `prev_hash` and `hash` fields
+- CLI output uses cleaner `[PASS]/[BLOCK]/[OK]/[NO]` markers
+
 ## [0.3.0] — 2026-05 — Self-Emergence Mechanism
 
 ### Added
