@@ -19,6 +19,20 @@ class ConditionVerifier:
     ``lte``, ``in``, ``nin``, ``regex``, ``exists``, ``type``.
 
     Composite operators: ``all_of`` (AND), ``any_of`` (OR), ``not``.
+
+    **Allowlist mode** (*deny_by_default*): when ``deny_by_default=True``,
+    ``verify()`` and ``evaluate()`` switch to ANY-match semantics —
+    at least one rule must pass for the context to be accepted.
+    Empty rules ⟶ reject (deny all).
+
+    .. code-block:: python
+
+        # Allowlist: only tools named "search" or "read" are allowed
+        g = ConditionVerifier(deny_by_default=True)
+        g.add_rule("name", "eq", "search")
+        g.add_rule("name", "eq", "read")
+        g.verify({"name": "delete"})     # False — denied by default
+        g.verify({"name": "search"})     # True  — on allowlist
     """
 
     BUILTIN_OPS: dict[str, str] = {
@@ -35,29 +49,44 @@ class ConditionVerifier:
         "type": "type check",
     }
 
-    def __init__(self, rules: Optional[list[dict]] = None):
+    def __init__(self, rules: Optional[list[dict]] = None, *, deny_by_default: bool = False):
         self.rules = rules or []
+        self.deny_by_default = deny_by_default
 
     def add_rule(self, field: str, op: str, value: Any) -> "ConditionVerifier":
         self.rules.append({"field": field, "op": op, "value": value})
         return self
 
     def verify(self, context: dict) -> bool:
-        """Return ``True`` when *every* rule passes against *context*."""
+        """Return ``True`` when rules pass against *context*.
+
+        * Normal mode (default): every rule must pass (AND).
+        * Allowlist mode (``deny_by_default=True``): at least one rule
+          must pass (OR).  Empty rules ⇒ deny everything.
+        """
         if not self.rules:
-            return True
+            return not self.deny_by_default  # deny-by-default: reject when empty
+        if self.deny_by_default:
+            return any(self._evaluate(r, context) for r in self.rules)
         return all(self._evaluate(r, context) for r in self.rules)
 
     def evaluate(self, context: dict) -> tuple[bool, list[dict]]:
         """
         Return ``(all_pass, [detail, ...])`` where each detail dict
         describes a single leaf rule or a composite node.
+
+        In allowlist mode the first ``passed`` flag is ``True`` when
+        **at least one** rule matched.
         """
         results: list[dict] = []
         for r in self.rules:
             detail = self._evaluate_detail(r, context)
             results.append(detail)
-        return all(r["passed"] for r in results), results
+        if not results:
+            return (not self.deny_by_default, [])
+        if self.deny_by_default:
+            return (any(r["passed"] for r in results), results)
+        return (all(r["passed"] for r in results), results)
 
     # ── internal ──────────────────────────────────────────────────────────
 

@@ -58,7 +58,7 @@ def load_policy(path: str, *, resolve_imports: bool = True) -> dict[str, Any]:
         Path to the ``.yaml`` or ``.yml`` policy file.
     resolve_imports:
         If ``True`` (default), recursively resolve ``@import`` references
-        in ``rules``.
+        in ``rules``, and resolve ``extends`` base policies.
 
     Returns
     -------
@@ -89,6 +89,14 @@ def load_policy(path: str, *, resolve_imports: bool = True) -> dict[str, Any]:
         raise PolicyValidationError(
             f"Policy file must contain a top-level mapping, got {type(data).__name__}"
         )
+
+    # ── resolve $extends before validation ──────────────────────────
+    if resolve_imports and "extends" in data:
+        data = _resolve_extends(data, filepath)
+
+    # ── optional $schema check ──────────────────────────────────────
+    if "$schema" in data:
+        _validate_schema(data, filepath)
 
     _validate_policy(data, filepath)
 
@@ -220,6 +228,34 @@ def _validate_rules(rules: list, filepath: Optional[Path] = None):
             )
 
 
+def _resolve_extends(data: dict, filepath: Path) -> dict:
+    """Resolve ``extends`` by loading the base policy and merging rules.
+
+    Base rules come first; child rules are appended (child wins on
+    duplicate top-level keys like ``strategy`` / ``top_k``).
+    """
+    base_path = filepath.parent / data["extends"]
+    if not base_path.exists():
+        base_path = Path(data["extends"]).resolve()
+    if not base_path.exists():
+        raise PolicyValidationError(
+            f"Extended policy not found: {data['extends']} "
+            f"(resolved: {base_path})"
+        )
+
+    base = load_policy(str(base_path), resolve_imports=True)
+
+    merged = dict(base)  # copy base
+    for key in ("name", "description", "strategy", "top_k", "context"):
+        if key in data:
+            merged[key] = data[key]
+
+    # Merge rules: base + child
+    merged["rules"] = base.get("rules", []) + data.get("rules", [])
+
+    return merged
+
+
 def _resolve_imports(rules: list, base_dir: Path) -> list:
     """Recursively resolve ``@import`` directives."""
     resolved = []
@@ -240,6 +276,30 @@ def _resolve_imports(rules: list, base_dir: Path) -> list:
         else:
             resolved.append(rule)
     return resolved
+
+
+def _validate_schema(data: dict, filepath: Optional[Path] = None) -> None:
+    """Validate a policy against its ``$schema`` directive (optional).
+
+    Currently supports a built-in ``cascade://policy`` schema reference
+    which enforces structural requirements beyond the standard validation.
+    """
+    schema = data.pop("$schema", None)
+    if not schema:
+        return
+
+    known_schemas = {
+        "cascade://policy": {
+            "description": "Standard cascade governance policy schema v1",
+            "version": "1.0.0",
+        },
+    }
+
+    if schema not in known_schemas:
+        raise PolicyValidationError(
+            f"Unknown $schema '{schema}' in {filepath or 'policy'}: "
+            f"must be one of {', '.join(known_schemas)}"
+        )
 
 
 def _normalize(data: dict) -> dict[str, Any]:

@@ -6,7 +6,7 @@ Guard LLM tool invocations with rules, scoring, and audit trails.
 
 from __future__ import annotations
 
-__version__ = "0.8.0"
+__version__ = "0.9.0"
 
 import json
 from pathlib import Path
@@ -83,6 +83,7 @@ class DecisionPipeline:
         enable_injection_detection: bool = False,
         injection_scan_depth: str = "arguments",
         injection_action: str = "reject",
+        deny_by_default: bool = False,
     ):
         store = store or Store(store_dir=str(Path.cwd() / ".cascade" / "store"))
         self._store = store
@@ -95,6 +96,7 @@ class DecisionPipeline:
         self._injection_enabled = enable_injection_detection
         self._injection_scan_depth = injection_scan_depth
         self._injection_action = injection_action
+        self._deny_by_default = deny_by_default
 
     # ── primary API ────────────────────────────────────────────────
 
@@ -189,7 +191,9 @@ class DecisionPipeline:
                 )
                 continue  # skip gate — already rejected
 
-            gate = ConditionVerifier()
+            gate = ConditionVerifier(
+                deny_by_default=self._deny_by_default,
+            )
             for r in rules:
                 if "compose" in r:
                     gate.rules.append(r)                # composite → verbatim
@@ -240,7 +244,9 @@ class DecisionPipeline:
                         continue
                     # re-evaluate gate with transformed tool call
                     merged = {**context, **transformed}
-                    gate = ConditionVerifier()
+                    gate = ConditionVerifier(
+                        deny_by_default=self._deny_by_default,
+                    )
                     for r in rules:
                         if "compose" in r:
                             gate.rules.append(r)
@@ -265,7 +271,9 @@ class DecisionPipeline:
                     if "arguments" in modified:
                         modified["arguments"] = transform_args(modified["arguments"])
                     merged = {**context, **modified}
-                    gate = ConditionVerifier()
+                    gate = ConditionVerifier(
+                        deny_by_default=self._deny_by_default,
+                    )
                     for r in rules:
                         if "compose" in r:
                             gate.rules.append(r)
@@ -341,6 +349,7 @@ class DecisionPipeline:
     # ── low-level convenience (unchanged) ──────────────────────────
 
     def set_gate_rules(self, rules: list[dict]) -> "DecisionPipeline":
+        self.gate = ConditionVerifier(deny_by_default=self._deny_by_default)
         for r in rules:
             self.gate.add_rule(r["field"], r["op"], r["value"])
         return self

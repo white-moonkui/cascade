@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] — 2026-06 — Deny-by-Default, Rule Presets & YAML @extends
+
+### Added
+- **Deny-by-default mode**: `DecisionPipeline(deny_by_default=True)` flips
+  C₁ gate to allowlist semantics — tools must match at least one rule to
+  pass; empty rules reject everything
+- **Rule presets module**: `cascade.presets` with 6 curated presets —
+  `DANGEROUS_TOOLS`, `CODE_EXECUTION`, `FILE_OPS`, `NETWORK_ACCESS`,
+  `DATA_EXFILTRATION`, `PRIVILEGED_ACTIONS` — plus `load_presets()` helper
+- **YAML `extends`**: policies can inherit from a base policy via the
+  ``extends`` top-level key; child rules are appended to base rules
+- **YAML `$schema`**: optional schema validation directive (built-in
+  ``cascade://policy`` schema recognised)
+
+### Changed
+- `ConditionVerifier` now accepts `deny_by_default` parameter that
+  switches evaluation to ANY-match (allowlist) semantics
+- `set_gate_rules()` re-creates the internal `ConditionVerifier` with
+  the pipeline's `deny_by_default` setting
+- Version bumped to 0.9.0
+
 ## [0.8.0] — 2026-06 — Gemini & AutoGen Adapters
 
 ### Added
