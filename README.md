@@ -45,7 +45,9 @@ Zero external dependencies.  Optional extras extend the feature set:
 
 ```bash
 pip install cascade[openai]     # OpenAI SDK adapter
+pip install cascade[anthropic]  # Anthropic SDK adapter
 pip install cascade[langchain]  # LangChain adapter
+pip install cascade[crewai]     # CrewAI adapter
 pip install cascade[yaml]       # YAML policy files + cascade policy lint
 ```
 
@@ -81,7 +83,7 @@ result = guard_agent_output(result, pipeline=pipe, rules=[...])
 - **Zero dependencies** — pure Python, no pip wars
 - **Plugs into any LLM framework** — OpenAI, LangChain, or custom
 - **Audit built in** — every `guard()` auto-writes JSONL audit trails
-- **4 selection strategies** — softmax / linear / uniform / threshold
+- **5 selection strategies** — softmax / linear / uniform / threshold / ucb1
 - **Self-emergence** — C₃↔C₄ closed loop learns from outcomes
 - **Composite rules** — `all_of` / `any_of` / `not_` for complex policies
 - **Actions** — `block` / `redirect` / `transform` for automated remediation
@@ -164,7 +166,10 @@ Linkage        : C₃↔C₄ closed loop — rewards adjust future selection
 | Framework | Adapter | Lines | Install |
 |-----------|---------|-------|---------|
 | [OpenAI SDK](src/cascade/adapters/openai.py) | `wrap_openai_client()` / `guard_openai_response()` | ~70 | `cascade[openai]` |
+| [Anthropic SDK](src/cascade/adapters/anthropic.py) | `guard_anthropic_response()` / `wrap_anthropic_client()` | ~70 | `cascade[anthropic]` |
 | [LangChain](src/cascade/adapters/langchain.py) | `guard_agent_output()` | ~55 | `cascade[langchain]` |
+| [CrewAI](src/cascade/adapters/crewai.py) | `guard_crew_output()` / `wrap_crew()` | ~65 | `cascade[crewai]` |
+| [MCP Server](src/cascade/adapters/mcp.py) | `guarded_tool()` / `MCPServerGuard` | ~100 | zero-dep (core) |
 
 Each adapter is **opt-in** — the core stays zero-dependency.  All adapters
 live in ``src/cascade/adapters/`` and import only what they need at runtime.

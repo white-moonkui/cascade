@@ -1,7 +1,7 @@
 """
 cascade adapters — plug governance into LLM frameworks.
 
-Each adapter is a thin (<80 lines) bridge between ``cascade.guard()``
+Each adapter is a thin (<100 lines) bridge between ``cascade.guard()``
 and a specific SDK.  Zero impact on the core codebase; import only
 what you need.
 """

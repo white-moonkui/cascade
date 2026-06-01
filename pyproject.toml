@@ -1,6 +1,6 @@
 [project]
 name = "agent-armour"
-version = "0.4.0"
+version = "0.6.0"
 description = "Guard LLM tool calls with rules, scoring, and audit trails."
 authors = [{ name = "cascade" }]
 license = { text = "MIT" }
@@ -26,7 +26,9 @@ where = ["src"]
 
 [project.optional-dependencies]
 openai = ["openai>=1.0"]
+anthropic = ["anthropic>=0.30"]
 langchain = ["langchain-core>=0.3"]
+crewai = ["crewai>=0.30"]
 yaml = ["pyyaml>=6.0"]
 dev = ["pytest>=7", "ruff>=0.6", "pyright>=1.1"]
 

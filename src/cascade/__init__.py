@@ -260,6 +260,8 @@ class DecisionPipeline:
             ranked = self.selector.rank(surviving, strategy=strategy, **kwargs)
             ranked = [c for c in ranked if c.pressure > 0]
             selected = self.selector.select(ranked, top_k=top_k)
+            # Track play-counts for UCB1 exploration/exploitation balance
+            self.selector.record_selection(selected)
             result["selected"] = [
                 {
                     "id": c.id,
@@ -330,11 +332,38 @@ class DecisionPipeline:
         result["triggers_fired"] = self.trigger.evaluate(context)
         return result
 
+    def selection_counts(self) -> dict[str, int]:
+        """Return current play-counts (how many times each tool was selected)."""
+        return self.selector.selection_counts()
+
+    def reset_selection_counts(self, label: Optional[str] = None) -> int:
+        """Reset play-counts. See ``SelectionPressure.reset_counts``."""
+        return self.selector.reset_counts(label)
+
+    def adaptive_threshold(
+        self,
+        min_threshold: float = 0.3,
+        max_threshold: float = 0.9,
+        sensitivity: float = 0.3,
+    ) -> float:
+        """Compute a dynamic ``min_score`` threshold from feedback signals.
+
+        Uses the average reward from C₄ feedback to adjust the threshold:
+        high reward → stricter threshold, low reward → more permissive.
+        """
+        avg_reward = self.feedback.average_reward()
+        return SelectionPressure.adaptive_threshold(
+            avg_reward=avg_reward,
+            min_threshold=min_threshold,
+            max_threshold=max_threshold,
+            sensitivity=sensitivity,
+        )
+
     def summary(self) -> dict:
         return {
             "gate": self.gate.summary(),
             "trigger": self.trigger.summary(),
-            "selector": {"module": "C3 (Selector)"},
+            "selector": {"module": "C3 (Selector)", "counts": self.selector.selection_counts()},
             "feedback": self.feedback.summary(),
             "linkage": {"module": "C3-C4 Linkage"},
         }

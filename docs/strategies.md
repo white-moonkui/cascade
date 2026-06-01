@@ -50,6 +50,60 @@ gate is eligible. `top_k` acts as a simple limit.
 **When to use:** When the rules are the only filter you need and you
 don't want confidence-based ranking.
 
+## ucb1
+
+```python
+result = pipe.guard(..., strategy="ucb1", top_k=1)
+```
+
+Upper Confidence Bound (UCB1) — a multi-armed bandit strategy that
+balances **exploration** (try under-used tools) with **exploitation**
+(prefer high-scoring tools).
+
+The pressure is: ``score + exploration_weight * sqrt(2 * ln(N) / n)``
+
+- *score* — the tool's current confidence / learned score
+- *N* — total selections across all tools
+- *n* — how many times this specific tool has been selected
+- ``exploration_weight`` — controls exploration aggressiveness (default 1.0)
+
+Unseen tools (n = 0) get a very large bonus to encourage initial
+exploration. After enough plays, the bonus fades and scores dominate.
+
+**Play-counts are tracked automatically.** Every ``guard()`` call
+records the selected tools via ``record_selection()``.
+
+```python
+# View current play-counts
+pipe.selection_counts()       # {'search': 42, 'calc': 15}
+
+# Reset after redeployment
+pipe.reset_selection_counts()
+```
+
+**When to use:** Production systems where you want to automatically
+discover which tools perform best without manual tuning.
+
+## Adaptive Threshold
+
+The ``adaptive_threshold()`` method computes a dynamic ``min_score``
+from C₄ feedback signals:
+
+```python
+# Uses average reward from feedback history
+min_score = pipe.adaptive_threshold(
+    min_threshold=0.3,   # floor (default 0.3)
+    max_threshold=0.9,   # ceiling (default 0.9)
+    sensitivity=0.3,     # how strongly reward affects threshold
+)
+
+result = pipe.guard(..., strategy="threshold", min_score=min_score)
+```
+
+When the system is performing well (high average reward), the threshold
+rises — only highly-confident tools pass. When performance drops, the
+bar lowers, allowing more exploration to find better tools.
+
 ## Summary
 
 | Strategy | Pressure distribution | Best for |
@@ -58,3 +112,4 @@ don't want confidence-based ranking.
 | linear | Linear proportional | Wide score ranges |
 | uniform | Equal | Random sampling, A/B tests |
 | threshold | All 1.0 | Rules-only governance |
+| ucb1 | Score + exploration bonus | Self-tuning production systems |
