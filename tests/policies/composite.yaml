@@ -1,0 +1,25 @@
+description: Policy with composite rules
+name: composite-policy
+rules:
+- field: name
+  op: nin
+  value:
+  - exec
+- all_of:
+  - field: confidence
+    op: gte
+    value: 0.8
+  - field: name
+    op: in
+    value:
+    - search
+    - read
+- any_of:
+  - field: role
+    op: eq
+    value: admin
+  - field: confidence
+    op: gte
+    value: 0.95
+strategy: threshold
+top_k: 3
