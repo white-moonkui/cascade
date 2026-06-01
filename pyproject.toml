@@ -1,5 +1,5 @@
 [project]
-name = "cascade"
+name = "agent-armour"
 version = "0.3.0"
 description = "Guard LLM tool calls with rules, scoring, and audit trails."
 authors = [{ name = "cascade" }]
