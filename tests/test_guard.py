@@ -2,15 +2,26 @@
 
 import json
 from pathlib import Path
+import tempfile
+
+import pytest
 
 from cascade import DecisionPipeline, AuditTrail
+from cascade._store import Store
+
+
+@pytest.fixture
+def isolated_store():
+    """Create an isolated temp store for each test to prevent cross-test pollution."""
+    d = tempfile.mkdtemp()
+    return Store(store_dir=d)
 
 
 # ── guard() basic ─────────────────────────────────────────────────
 
 
-def test_guard_selects_highest_confidence():
-    pipe = DecisionPipeline()
+def test_guard_selects_highest_confidence(isolated_store):
+    pipe = DecisionPipeline(store=isolated_store)
     result = pipe.guard(
         tool_calls=[
             {"id": "a", "name": "search", "confidence": 0.9},
@@ -25,8 +36,8 @@ def test_guard_selects_highest_confidence():
     assert result["selected"][0]["name"] == "search"
 
 
-def test_guard_top_k():
-    pipe = DecisionPipeline()
+def test_guard_top_k(isolated_store):
+    pipe = DecisionPipeline(store=isolated_store)
     result = pipe.guard(
         tool_calls=[
             {"id": "a", "name": "search", "confidence": 0.9},
@@ -41,8 +52,8 @@ def test_guard_top_k():
     assert result["selected"][1]["name"] == "calc"
 
 
-def test_guard_rejects_by_rule():
-    pipe = DecisionPipeline()
+def test_guard_rejects_by_rule(isolated_store):
+    pipe = DecisionPipeline(store=isolated_store)
     result = pipe.guard(
         tool_calls=[
             {"id": "a", "name": "delete_file", "confidence": 0.9},
@@ -61,8 +72,8 @@ def test_guard_rejects_by_rule():
     assert gate_a["passed"] is False
 
 
-def test_guard_confidence_threshold():
-    pipe = DecisionPipeline()
+def test_guard_confidence_threshold(isolated_store):
+    pipe = DecisionPipeline(store=isolated_store)
     result = pipe.guard(
         tool_calls=[
             {"id": "a", "name": "risky_op", "confidence": 0.2},
@@ -76,8 +87,8 @@ def test_guard_confidence_threshold():
     assert result["selected"][0]["name"] == "safe_op"
 
 
-def test_guard_all_rejected():
-    pipe = DecisionPipeline()
+def test_guard_all_rejected(isolated_store):
+    pipe = DecisionPipeline(store=isolated_store)
     result = pipe.guard(
         tool_calls=[
             {"id": "a", "name": "bad", "confidence": 0.1},
@@ -89,15 +100,15 @@ def test_guard_all_rejected():
     assert result["selected"] == []
 
 
-def test_guard_empty_tool_calls():
-    pipe = DecisionPipeline()
+def test_guard_empty_tool_calls(isolated_store):
+    pipe = DecisionPipeline(store=isolated_store)
     result = pipe.guard(tool_calls=[])
     assert result["passed"] is True
     assert result["selected"] == []
 
 
-def test_guard_no_rules_all_pass():
-    pipe = DecisionPipeline()
+def test_guard_no_rules_all_pass(isolated_store):
+    pipe = DecisionPipeline(store=isolated_store)
     result = pipe.guard(
         tool_calls=[
             {"id": "a", "name": "foo", "confidence": 0.5},
@@ -112,8 +123,8 @@ def test_guard_no_rules_all_pass():
 # ── guard() with context ──────────────────────────────────────────
 
 
-def test_guard_context_gate():
-    pipe = DecisionPipeline()
+def test_guard_context_gate(isolated_store):
+    pipe = DecisionPipeline(store=isolated_store)
     # context with user_role=admin should pass
     result = pipe.guard(
         tool_calls=[{"id": "a", "name": "search", "confidence": 0.8}],
@@ -135,8 +146,8 @@ def test_guard_context_gate():
 # ── guard() strategy parameter ────────────────────────────────────
 
 
-def test_guard_with_threshold_strategy():
-    pipe = DecisionPipeline()
+def test_guard_with_threshold_strategy(isolated_store):
+    pipe = DecisionPipeline(store=isolated_store)
     result = pipe.guard(
         tool_calls=[
             {"id": "a", "name": "high", "confidence": 0.9},

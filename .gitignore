@@ -1,26 +1,50 @@
-# Python
+# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
-*.egg-info/
-dist/
+*$py.class
+
+# Distribution / packaging
+.Python
 build/
+dist/
+*.egg-info/
+*.egg
 
-# Testing
+# PyInstaller
+*.manifest
+*.spec
+
+# Test coverage
+.coverage
 .pytest_cache/
-.cache/
+htmlcov/
 
-# IDE
+# ruff
+.ruff_cache/
+
+# mypy
+.mypy_cache/
+
+# Store directories (runtime state — not committed)
+.cascade/store/
+.cascade/audit.jsonl
+
+# Editor
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
 
 # OS
 .DS_Store
 Thumbs.db
 
-# Cascade checkpoints
-.cascade/
-
-# Virtual environments
+# Environment
 .env
+.env.local
 venv/
 .venv/
+
+# uv lock (project-specific)
+uv.lock

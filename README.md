@@ -2,17 +2,16 @@
 
 **Guard LLM tool calls with rules, scoring, and audit trails.**
 
-AI Agent 做工具选择是随机的、不可控的、不可审计的。cascade 在 LLM 选出工具之后、执行之前，插入一道治理阀门。
+[![PyPI version](https://badge.fury.io/py/cascade.svg)](https://badge.fury.io/py/cascade)
+[![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://github.com/white-moonkui/cascade)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Tests](https://github.com/white-moonkui/cascade/actions/workflows/ci.yml/badge.svg)](https://github.com/white-moonkui/cascade/actions)
 
-## 安装
+`cascade` is a lightweight governance layer for AI agent tool calls. It sits
+between your LLM and tool execution — evaluate every tool call against rules,
+rank survivors by strategy, and audit every decision.
 
-```bash
-pip install cascade
-```
-
-零外部依赖。
-
-## 三行搞定
+## Quick Start
 
 ```python
 from cascade import DecisionPipeline
@@ -20,28 +19,64 @@ from cascade import DecisionPipeline
 pipe = DecisionPipeline()
 result = pipe.guard(
     tool_calls=[
-        {"id": "1", "name": "web_search",   "confidence": 0.9, "arguments": {"q": "..."}},
-        {"id": "2", "name": "delete_file",  "confidence": 0.3, "arguments": {"path": "/"}},
-        {"id": "3", "name": "send_email",   "confidence": 0.7, "arguments": {"to": "..."}},
+        {"id": "1", "name": "search", "confidence": 0.92},
+        {"id": "2", "name": "delete", "confidence": 0.15},
     ],
     rules=[
-        {"field": "confidence", "op": "gte",   "value": 0.5},
-        {"field": "name",       "op": "nin",   "value": ["delete_file"]},
+        {"field": "confidence", "op": "gte", "value": 0.5},
+        {"field": "name", "op": "nin", "value": ["delete"]},
     ],
     strategy="softmax",
-    top_k=2,
+    top_k=1,
 )
 
-for tool in result["selected"]:
-    print(f"✅ {tool['name']} (conf={tool['confidence']}, pressure={tool['pressure']:.3f})")
-# ✅ web_search (conf=0.9, pressure=0.665)
-# ✅ send_email (conf=0.7, pressure=0.335)
+if result["selected"]:
+    safe = result["selected"][0]
+    print(f"Safe: {safe['name']} ({safe['confidence']})")
 ```
 
-## 集成
+## Installation
+
+```bash
+pip install cascade
+```
+
+Zero external dependencies.
+
+## Why cascade?
+
+- **Zero dependencies** — pure Python, no pip wars
+- **Plugs into any LLM framework** — OpenAI, LangChain, or custom
+- **Audit built in** — every `guard()` auto-writes JSONL audit trails
+- **4 selection strategies** — softmax / linear / uniform / threshold
+- **Self-emergence** — C₃↔C₄ closed loop learns from outcomes
+- **Composite rules** — `all_of` / `any_of` / `not_` for complex policies
+- **Actions** — `block` / `redirect` / `transform` for automated remediation
+
+## C1–C4 Architecture
+
+```
+C1 (Gate)      : Rule engine — 11 operators + AND/OR/NOT composition
+C2 (Trigger)   : Event triggers — condition callbacks + state machine
+C3 (Selector)  : Selection pressure — uniform/linear/softmax/threshold ranking
+C4 (Feedback)  : Feedback loop — binary/proportional/threshold reward
+Linkage        : C₃↔C₄ closed loop — rewards adjust future selection
+```
+
+## Docs
+
+| File | What it covers |
+|------|----------------|
+| [docs/usage.md](docs/usage.md) | `guard()` API, `DecisionPipeline`, `AuditTrail` |
+| [docs/rules.md](docs/rules.md) | Leaf rules, rule presets, composite rules (all_of/any_of/not_) |
+| [docs/strategies.md](docs/strategies.md) | Selection strategies and when to use each |
+| [docs/cli.md](docs/cli.md) | `cascade check` CLI reference |
+| [CHANGELOG.md](CHANGELOG.md) | Version history |
+
+## Integrations
 
 ```python
-# OpenAI SDK — 在 tool_choice 前拦截
+# OpenAI SDK — intercept before tool_choice
 response = client.chat.completions.create(..., tools=my_tools)
 safe_tools = pipe.guard(
     tool_calls=[t.dict() for t in response.choices[0].message.tool_calls],
@@ -50,28 +85,7 @@ safe_tools = pipe.guard(
 ```
 
 ```python
-# LangChain — Agent 输出过一道 cascade
+# LangChain — agent output goes through cascade
 agent_result = agent.invoke({"input": query})
 safe = pipe.guard(tool_calls=agent_tool_calls, rules=[...])
 ```
-
-## API
-
-| 方法 | 作用 |
-|---|---|
-| `pipe.guard(tool_calls, rules, strategy, top_k, context)` | 一条命令完成规则验证 + 择优选择 + 审计日志 |
-| `pipe.audit.recent(limit=10)` | 查看最近审计记录 |
-| `pipe.audit.query(tool_name="...")` | 按工具名或状态查询审计记录 |
-
-## 选择策略
-
-| 策略 | 行为 |
-|---|---|
-| `softmax` | 按 confidence 软最大化分配压力（默认） |
-| `linear` | 按 confidence 线性分配 |
-| `uniform` | 所有候选等概率 |
-| `threshold` | 低于 `min_score` 的候选直接淘汰 |
-
-## 项目状态
-
-v0.2.0 — 方向确定、API 稳定、81 个测试全过。正在建立集成生态。
